@@ -93,9 +93,11 @@ extern const PIN_Config BoardGpioInitTable[];
 #define CC1310_LAUNCHXL_PIN_LED_OFF           1
 #define CC1310_LAUNCHXL_PIN_BLED              IOID_0
 
-/* PWM Outputs */
-#define CC1310_LAUNCHXL_PWMPIN0               IOID_7
+/* cc33235s Sync Input */
+#define CC1310_LAUNCHXL_SYNC_PWM              IOID_7
 
+/* WAKEUP to indicate cc3235s to get event */
+#define CC1310_LAUNCHXL_WAKEUP                IOID_4
 
 /* UART Board */
 #define CC1310_LAUNCHXL_UART_RX               IOID_1          /* RXD */

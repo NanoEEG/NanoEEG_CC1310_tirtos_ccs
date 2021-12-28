@@ -419,14 +419,9 @@ const uint_least8_t TRNG_count = CC1310_LAUNCHXL_TRNGCOUNT;
 #define BOARD_DISPLAY_UART_STRBUF_SIZE    128
 #endif
 
-/* This value can be changed to 96 for use with the 430BOOST-SHARP96 BoosterPack. */
-#define BOARD_DISPLAY_SHARP_SIZE    128
-
 DisplayUart_Object     displayUartObject;
-DisplaySharp_Object    displaySharpObject;
 
 static char uartStringBuf[BOARD_DISPLAY_UART_STRBUF_SIZE];
-static uint_least8_t sharpDisplayBuf[BOARD_DISPLAY_SHARP_SIZE * BOARD_DISPLAY_SHARP_SIZE / 8];
 
 const DisplayUart_HWAttrs displayUartHWAttrs = {
     .uartIdx      = CC1310_LAUNCHXL_UART0,
@@ -436,15 +431,6 @@ const DisplayUart_HWAttrs displayUartHWAttrs = {
     .strBufLen    = BOARD_DISPLAY_UART_STRBUF_SIZE,
 };
 
-const DisplaySharp_HWAttrsV1 displaySharpHWattrs = {
-    .spiIndex    = CC1310_LAUNCHXL_SPI0,
-    .csPin       = CC1310_LAUNCHXL_GPIO_LCD_CS,
-    .powerPin    = CC1310_LAUNCHXL_GPIO_LCD_POWER,
-    .enablePin   = CC1310_LAUNCHXL_GPIO_LCD_ENABLE,
-    .pixelWidth  = BOARD_DISPLAY_SHARP_SIZE,
-    .pixelHeight = BOARD_DISPLAY_SHARP_SIZE,
-    .displayBuf  = sharpDisplayBuf,
-};
 
 #ifndef BOARD_DISPLAY_USE_UART
 #define BOARD_DISPLAY_USE_UART 1
@@ -452,9 +438,7 @@ const DisplaySharp_HWAttrsV1 displaySharpHWattrs = {
 #ifndef BOARD_DISPLAY_USE_UART_ANSI
 #define BOARD_DISPLAY_USE_UART_ANSI 0
 #endif
-#ifndef BOARD_DISPLAY_USE_LCD
-#define BOARD_DISPLAY_USE_LCD 0
-#endif
+
 
 /*
  * This #if/#else is needed to workaround a problem with the
@@ -676,7 +660,10 @@ const uint_least8_t NVS_count = CC1310_LAUNCHXL_NVSCOUNT;
 const PIN_Config BoardGpioInitTable[] = {
 
     CC1310_LAUNCHXL_PIN_BLED | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,       /* LED initially On    */
-
+    CC1310_LAUNCHXL_SYNC_PWM | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,
+    CC1310_LAUNCHXL_WAKEUP | PIN_INPUT_EN | PIN_INPUT_DIS,
+    CC1310_LAUNCHXL_UART_RX | PIN_INPUT_EN | PIN_PULLDOWN,                                              /* UART RX via debugger back channel */
+    CC1310_LAUNCHXL_UART_TX | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL,                         /* UART TX via debugger back channel */
     PIN_TERMINATE
 };
 
@@ -700,26 +687,7 @@ const PowerCC26XX_Config PowerCC26XX_config = {
     .calibrateRCOSC_HF  = true,
 };
 
-/*
- *  =============================== PWM ===============================
- *  Remove unused entries to reduce flash usage both in Board.c and Board.h
- */
-#include <ti/drivers/PWM.h>
-#include <ti/drivers/pwm/PWMTimerCC26XX.h>
 
-PWMTimerCC26XX_Object pwmtimerCC26xxObjects[CC1310_LAUNCHXL_PWMCOUNT];
-
-const PWMTimerCC26XX_HwAttrs pwmtimerCC26xxHWAttrs[CC1310_LAUNCHXL_PWMCOUNT] = {
-    { .pwmPin = CC1310_LAUNCHXL_PWMPIN0, .gpTimerUnit = CC1310_LAUNCHXL_GPTIMER0A },
-
-};
-
-const PWM_Config PWM_config[CC1310_LAUNCHXL_PWMCOUNT] = {
-    { &PWMTimerCC26XX_fxnTable, &pwmtimerCC26xxObjects[CC1310_LAUNCHXL_PWM0], &pwmtimerCC26xxHWAttrs[CC1310_LAUNCHXL_PWM0] },
-
-};
-
-const uint_least8_t PWM_count = CC1310_LAUNCHXL_PWMCOUNT;
 
 /*
  *  =============================== RF Driver ===============================

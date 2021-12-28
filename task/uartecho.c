@@ -35,10 +35,13 @@
  */
 #include <stdint.h>
 #include <stddef.h>
+#include <unistd.h>
 
 /* Driver Header files */
 #include <ti/drivers/PIN.h>
 #include <ti/drivers/UART.h>
+#include <ti/display/Display.h>
+#include <ti/display/DisplayUart.h>
 
 /* Example/Board Header files */
 #include "Board.h"
@@ -48,14 +51,10 @@
  */
 void *mainThread(void *arg0)
 {
-    char        input;
-    const char  echoPrompt[] = "Echoing characters:\r\n";
-    UART_Handle uart;
-    UART_Params uartParams;
     PIN_State   LEDPIN;
 
     /* Call driver init functions */
-    UART_init();
+    Display_init();
 
     // Get handle to this collection of pins
     if (!PIN_open(&LEDPIN, BoardGpioInitTable)) {
@@ -64,27 +63,22 @@ void *mainThread(void *arg0)
 
     PIN_setOutputValue(&LEDPIN, CC1310_LAUNCHXL_PIN_BLED, PIN_getOutputValue(CC1310_LAUNCHXL_PIN_BLED));
 
-    /* Create a UART with data processing off. */
-    UART_Params_init(&uartParams);
-    uartParams.writeDataMode = UART_DATA_BINARY;
-    uartParams.readDataMode = UART_DATA_BINARY;
-    uartParams.readReturnMode = UART_RETURN_FULL;
-    uartParams.readEcho = UART_ECHO_OFF;
-    uartParams.baudRate = 115200;
+    /* Initialize display */
+    Display_Params params;
+    Display_Params_init(&params);
+    params.lineClearMode = DISPLAY_CLEAR_BOTH;
 
-    uart = UART_open(Board_UART0, &uartParams);
+    Display_Handle display = Display_open(Display_Type_UART, &params);
 
-    if (uart == NULL) {
+    if (display == NULL) {
         /* UART_open() failed */
         while (1);
     }
 
-    UART_write(uart, echoPrompt, sizeof(echoPrompt));
+    Display_printf(display, 0, 0, "Hello Serial!");
 
     /* Loop forever echoing */
     while (1) {
-        UART_read(uart, &input, 1);
-        UART_write(uart, &input, 1);
 
         //PIN_setOutputValue(&LEDPIN, CC1310_LAUNCHXL_PIN_BLED, ~PIN_getOutputValue(CC1310_LAUNCHXL_PIN_BLED));
     }
