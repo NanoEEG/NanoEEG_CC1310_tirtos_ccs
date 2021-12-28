@@ -478,6 +478,7 @@ const uint_least8_t Display_count = 0;
 #endif /* (BOARD_DISPLAY_USE_UART || BOARD_DISPLAY_USE_LCD) */
 
 
+
 /*
  *  =============================== GPTimer ===============================
  *  Remove unused entries to reduce flash usage both in Board.c and Board.h
@@ -658,12 +659,9 @@ const uint_least8_t NVS_count = CC1310_LAUNCHXL_NVSCOUNT;
 #include <ti/drivers/pin/PINCC26XX.h>
 
 const PIN_Config BoardGpioInitTable[] = {
-
-    CC1310_LAUNCHXL_PIN_BLED | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,       /* LED initially On    */
-    CC1310_LAUNCHXL_SYNC_PWM | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,
+    CC1310_LAUNCHXL_PIN_BLED | PIN_GPIO_OUTPUT_EN | PIN_GPIO_HIGH | PIN_PUSHPULL | PIN_DRVSTR_MAX,
+    CC1310_LAUNCHXL_SYNC_PWM | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX, //TODO cc3235s 的同步定时器1s翻电平，不触发主核中断，RAT要设置成上下边沿捕获
     CC1310_LAUNCHXL_WAKEUP | PIN_INPUT_EN | PIN_INPUT_DIS,
-    CC1310_LAUNCHXL_UART_RX | PIN_INPUT_EN | PIN_PULLDOWN,                                              /* UART RX via debugger back channel */
-    CC1310_LAUNCHXL_UART_TX | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL,                         /* UART TX via debugger back channel */
     PIN_TERMINATE
 };
 
@@ -809,7 +807,7 @@ void CC1310_LAUNCHXL_initGeneral(void)
     }
 
     /* Perform board-specific initialization */
-    Board_initHook();
+    //Board_initHook();
 }
 
 /*

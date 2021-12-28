@@ -30,14 +30,15 @@
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*
- *  ======== uartecho.c ========
+/********************************************************************************
+ *  INCLUDES
  */
 #include <stdint.h>
 #include <stddef.h>
 #include <unistd.h>
 
 /* Driver Header files */
+#include <ti/drivers/I2C.h>
 #include <ti/drivers/PIN.h>
 #include <ti/drivers/UART.h>
 #include <ti/display/Display.h>
@@ -46,12 +47,21 @@
 /* Example/Board Header files */
 #include "Board.h"
 
+/* POSIX Header files */
+#include <semaphore.h>
+
+/********************************************************************************
+ *  GLOBAL VARIABLES
+ */
+Display_Handle display = NULL;
+sem_t EvtDataRecv;
+PIN_State   LEDPIN;
+
 /*
  *  ======== mainThread ========
  */
 void *mainThread(void *arg0)
 {
-    PIN_State   LEDPIN;
 
     /* Call driver init functions */
     Display_init();
@@ -61,23 +71,28 @@ void *mainThread(void *arg0)
         // Handle allocation error
     }
 
-    PIN_setOutputValue(&LEDPIN, CC1310_LAUNCHXL_PIN_BLED, PIN_getOutputValue(CC1310_LAUNCHXL_PIN_BLED));
-
     /* Initialize display */
     Display_Params params;
     Display_Params_init(&params);
     params.lineClearMode = DISPLAY_CLEAR_BOTH;
-
-    Display_Handle display = Display_open(Display_Type_UART, &params);
+    display = Display_open(Display_Type_UART, &params);
 
     if (display == NULL) {
         /* UART_open() failed */
         while (1);
     }
 
-    Display_printf(display, 0, 0, "Hello Serial!");
+    /* Initialize semaphore */
+    sem_init(&EvtDataRecv, 0, 0);
 
-    /* Loop forever echoing */
+    Display_printf(display, 0, 0, "NanoEEG cc1310 ready!");
+
+    /* led on to indicate the system is ready! */
+    PIN_setOutputValue(&LEDPIN, CC1310_LAUNCHXL_PIN_BLED, CC1310_LAUNCHXL_PIN_LED_ON);
+
+    //测试版本
+    //定时器2s释放信号量
+
     while (1) {
 
         //PIN_setOutputValue(&LEDPIN, CC1310_LAUNCHXL_PIN_BLED, ~PIN_getOutputValue(CC1310_LAUNCHXL_PIN_BLED));
