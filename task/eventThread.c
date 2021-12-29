@@ -12,60 +12,68 @@
 /********************************************************************
  *  MACROS
  */
-#define CC1310_SLAVEADDR    0x01
+#define CC1310_SLAVEADDR    0x33
 
 /********************************************************************
  *  INCLUDES
  */
+
+/* Example/Board Header files */
+#include "Board.h"
 
 /* POSIX Header files */
 #include <semaphore.h>
 
 #include <NanoEEG_CC1310.h>
 
-#include <ti/drivers/PIN.h>
-#include <ti/devices/cc13x0/driverlib/i2c.h>
-#include <ti/devices/cc13x0/driverlib/prcm.h>
-#include <ti/devices/cc13x0/driverlib/ioc.h>
-#include <ti/devices/cc13x0/inc/hw_memmap.h>
+/* RTOS driver header files */
+#include <ti/drivers/GPIO.h>
+#include <ti/drivers/dpl/HwiP.h>
+#include <ti/drivers/Power.h>
+#include <ti/drivers/power/PowerCC26XX.h>
+
+/* Driverlib header files */
+#include <ti/devices/DeviceFamily.h>
+#include DeviceFamily_constructPath(inc/hw_memmap.h)
+#include DeviceFamily_constructPath(inc/hw_types.h)
+#include DeviceFamily_constructPath(driverlib/i2c.h)
+#include DeviceFamily_constructPath(driverlib/ioc.h)
+#include DeviceFamily_constructPath(driverlib/prcm.h)
 
 /*********************************************************************
  *  EXTERNAL VARIABLES
  */
 extern sem_t EvtDataRecv;
 
-
 /********************************************************************
  *  LOCAL FUNCTIONS
  */
 static void cc1310_I2C_init(){
 
-    /* enable the power domain */
-    PRCMPeripheralRunEnable(PRCM_PERIPH_I2C0);
-    PRCMPeripheralSleepEnable(PRCM_PERIPH_I2C0);
-    PRCMPeripheralDeepSleepEnable(PRCM_PERIPH_I2C0);
+    /* Power on the I2C module */
+    Power_setDependency(PowerCC26XX_PERIPH_I2C0);
+
+    /* Set constraints for Standby, powerdown and idle mode */
+    Power_setConstraint(PowerCC26XX_SB_DISALLOW);
+    Power_setConstraint(PowerCC26XX_IDLE_PD_DISALLOW);
 
     PRCMLoadSet();
+    PRCMPeripheralRunEnable(PRCM_PERIPH_I2C0); // Enable I2C module
+    PRCMLoadSet();
+    while(!PRCMLoadGet());
+
+    I2CSlaveDisable(I2C0_BASE);
 
     /* configure the IOC to route SDA SCL signal from IO to I2C module */
-    IOCPortConfigureSet(CC1310_LAUNCHXL_I2C0_SCL0,\
-                        IOC_PORT_MCU_I2C_MSSCL,\
-                        IOC_IOMODE_OPEN_DRAIN_NORMAL|\
-                        IOC_NO_EDGE|\
-                        IOC_INT_DISABLE|\
-                        IOC_IOPULL_UP|\
-                        IOC_INPUT_ENABLE);
+    IOCPinTypeI2c(I2C0_BASE,CC1310_LAUNCHXL_I2C0_SDA0,CC1310_LAUNCHXL_I2C0_SCL0);
 
-    IOCPortConfigureSet(CC1310_LAUNCHXL_I2C0_SDA0,\
-                        IOC_PORT_MCU_I2C_MSSDA,\
-                        IOC_IOMODE_OPEN_DRAIN_NORMAL|\
-                        IOC_NO_EDGE|\
-                        IOC_INT_DISABLE|\
-                        IOC_IOPULL_UP|\
-                        IOC_INPUT_ENABLE);
+    I2CSlaveIntDisable(I2C0_BASE, I2C_SLAVE_INT_STOP|\
+                       I2C_SLAVE_INT_START|\
+                       I2C_SLAVE_INT_DATA);
 
     /* set the cc1310 as I2C slave */
     I2CSlaveInit(I2C0_BASE,CC1310_SLAVEADDR);
+
 }
 
 
@@ -75,16 +83,10 @@ static void cc1310_I2C_init(){
  */
 void *eventThread(void *arg0){
 
-    PIN_State   WAKEUP_PIN;
-
-    // Get handle to this collection of pins
-    if (!PIN_open(&WAKEUP_PIN, BoardGpioInitTable)) {
-        // Handle allocation error
-    }
     /* initial cc1310 I2C as slave */
     cc1310_I2C_init();
 
-    // 测试版本：信号量由主线程定时器释放
+    GPIO_setConfig(Board_GPIO_WAKEUP, GPIO_CFG_OUTPUT | GPIO_CFG_OUT_STR_HIGH | GPIO_CFG_OUT_HIGH);
 
     while(1){
 
@@ -92,11 +94,16 @@ void *eventThread(void *arg0){
         sem_wait(&EvtDataRecv);
 
         // 翻转IO 通知cc3235s发起I2C传输
-        PIN_setOutputValue(&WAKEUP_PIN,CC1310_LAUNCHXL_WAKEUP,~PIN_getOutputValue(CC1310_LAUNCHXL_WAKEUP));
+        GPIO_toggle(Board_GPIO_WAKEUP);
 
         // 轮询等待cc3235s发起事件标签传输
-        while( I2CSlaveStatus(I2C0_BASE)!= I2C_SLAVE_ACT_TREQ);
-        I2CSlaveDataPut(I2C0_BASE,0xaa);
+
+        while(I2CSlaveStatus(I2C0_BASE)!=I2C_SLAVE_ACT_TREQ);
+        I2CSlaveDataPut(I2C0_BASE,0x01);
+        while(I2CSlaveStatus(I2C0_BASE)!=I2C_SLAVE_ACT_TREQ);
+        I2CSlaveDataPut(I2C0_BASE,0x01);
+        while(I2CSlaveStatus(I2C0_BASE)!=I2C_SLAVE_ACT_TREQ);
+        I2CSlaveDataPut(I2C0_BASE,0x01);
 
     }
 

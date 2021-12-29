@@ -37,9 +37,12 @@
 #include <stddef.h>
 #include <unistd.h>
 
+/* POSIX Header files */
+#include <pthread.h>
+
 /* Driver Header files */
 #include <ti/drivers/I2C.h>
-#include <ti/drivers/PIN.h>
+#include <ti/drivers/GPIO.h>
 #include <ti/drivers/UART.h>
 #include <ti/display/Display.h>
 #include <ti/display/DisplayUart.h>
@@ -53,23 +56,36 @@
 /********************************************************************************
  *  GLOBAL VARIABLES
  */
+pthread_t   eventthread;
 Display_Handle display = NULL;
 sem_t EvtDataRecv;
-PIN_State   LEDPIN;
+
+/********************************************************************************
+ *  EXTERNAL FUNCTIONS
+ */
+extern void *eventThread(void *arg0);
+
+// 测试版本
+void testcb(uint_least8_t index){
+
+
+    GPIO_toggle(Board_GPIO_LED_BLUE);
+    sem_post(&EvtDataRecv);
+}
+
 
 /*
  *  ======== mainThread ========
  */
 void *mainThread(void *arg0)
 {
+    pthread_attr_t      attrs;
+    struct sched_param  priParam;
+    int                 retc;
 
     /* Call driver init functions */
     Display_init();
-
-    // Get handle to this collection of pins
-    if (!PIN_open(&LEDPIN, BoardGpioInitTable)) {
-        // Handle allocation error
-    }
+    GPIO_init();
 
     /* Initialize display */
     Display_Params params;
@@ -88,13 +104,34 @@ void *mainThread(void *arg0)
     Display_printf(display, 0, 0, "NanoEEG cc1310 ready!");
 
     /* led on to indicate the system is ready! */
-    PIN_setOutputValue(&LEDPIN, CC1310_LAUNCHXL_PIN_BLED, CC1310_LAUNCHXL_PIN_LED_ON);
+    GPIO_write(Board_GPIO_LED_BLUE,CC1310_LAUNCHXL_PIN_LED_ON);
 
     //测试版本
-    //定时器2s释放信号量
+    GPIO_setConfig(Board_GPIO_TEST_IN, GPIO_CFG_IN_PU | GPIO_CFG_IN_INT_RISING);
+    GPIO_setCallback(Board_GPIO_TEST_IN,testcb);
+    GPIO_enableInt(Board_GPIO_TEST_IN);
+
+    /* cc3235事件标签处理线程*/
+    /* Initialize the attributes structure with default values */
+    pthread_attr_init(&attrs);
+
+    /* Set priority, detach state, and stack size attributes */
+    priParam.sched_priority = 3;
+    retc = pthread_attr_setschedparam(&attrs, &priParam);
+    retc |= pthread_attr_setdetachstate(&attrs, PTHREAD_CREATE_DETACHED);
+    retc |= pthread_attr_setstacksize(&attrs, 1024);
+    if (retc != 0) {
+        /* failed to set attributes */
+        while (1) {}
+    }
+
+    retc = pthread_create(&eventthread, &attrs, eventThread, NULL);
+    if (retc != 0) {
+        /* pthread_create() failed */
+        while (1) {}
+    }
 
     while (1) {
 
-        //PIN_setOutputValue(&LEDPIN, CC1310_LAUNCHXL_PIN_BLED, ~PIN_getOutputValue(CC1310_LAUNCHXL_PIN_BLED));
     }
 }

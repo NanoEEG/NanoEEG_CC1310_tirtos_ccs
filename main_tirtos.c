@@ -46,14 +46,14 @@
 #include <ti/drivers/Board.h>
 
 extern void *mainThread(void *arg0);
-extern void *eventThread(void *arg0);
+
 
 /* Stack size in bytes */
 #define THREADSTACKSIZE    1024
 
 
 pthread_t           mainthread;
-pthread_t           eventthread;
+
 
 /*
  *  ======== main ========
@@ -73,26 +73,6 @@ int main(void)
     pthread_attr_init(&attrs);
 
     /* Set priority, detach state, and stack size attributes */
-    priParam.sched_priority = 1;
-    retc = pthread_attr_setschedparam(&attrs, &priParam);
-    retc |= pthread_attr_setdetachstate(&attrs, PTHREAD_CREATE_DETACHED);
-    retc |= pthread_attr_setstacksize(&attrs, THREADSTACKSIZE);
-    if (retc != 0) {
-        /* failed to set attributes */
-        while (1) {}
-    }
-
-    retc = pthread_create(&mainthread, &attrs, mainThread, NULL);
-    if (retc != 0) {
-        /* pthread_create() failed */
-        while (1) {}
-    }
-
-    /* cc3235事件标签处理线程*/
-    /* Initialize the attributes structure with default values */
-    pthread_attr_init(&attrs);
-
-    /* Set priority, detach state, and stack size attributes */
     priParam.sched_priority = 2;
     retc = pthread_attr_setschedparam(&attrs, &priParam);
     retc |= pthread_attr_setdetachstate(&attrs, PTHREAD_CREATE_DETACHED);
@@ -102,7 +82,7 @@ int main(void)
         while (1) {}
     }
 
-    retc = pthread_create(&eventthread, &attrs, eventThread, NULL);
+    retc = pthread_create(&mainthread, &attrs, mainThread, NULL);
     if (retc != 0) {
         /* pthread_create() failed */
         while (1) {}
