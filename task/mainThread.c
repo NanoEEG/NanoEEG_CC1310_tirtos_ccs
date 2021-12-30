@@ -144,6 +144,7 @@ void onSignalTriggered(RF_Handle h, RF_RatHandle rh, RF_EventMask e, uint32_t co
                    compareCaptureTime,lastCaptureTime,delay);
 }
 
+static int index = 0;
 void RxRecvcallback(RF_Handle h, RF_CmdHandle ch, RF_EventMask e)
 {
     if (e & RF_EventRxEntryDone)
@@ -158,9 +159,18 @@ void RxRecvcallback(RF_Handle h, RF_CmdHandle ch, RF_EventMask e)
         packetDataPointer = (uint8_t*)(&currentDataEntry->data + 1);
 
         /* Copy the payload + the status byte to the packet variable */
-        memcpy(packet, packetDataPointer, (packetLength + 1));
+        //memcpy(packet, packetDataPointer, (packetLength + 1));
+        I2C_BUFF.Index = index++;
+        I2C_BUFF.Type = *packetDataPointer;
+        memcpy(&I2C_BUFF.Tror, (uint8_t*)(packetDataPointer+1),4);
 
         RFQueue_nextEntry();
+
+        // 翻转IO 通知cc3235s发起I2C传输
+        GPIO_toggle(Board_GPIO_WAKEUP);
+
+        sem_post(&EvtDataRecv);
+
     }
 }
 
@@ -209,6 +219,8 @@ static void RF_Config(){
     RF_cmdPropRx.maxPktLen = MAX_LENGTH;
     RF_cmdPropRx.pktConf.bRepeatOk = 1;
     RF_cmdPropRx.pktConf.bRepeatNok = 1;
+
+    RF_cmdPropRx.rxConf.bAppendTimestamp = 1;   /* Append RX time stamp to the packet payload */
 
     /* Request access to the radio */
 #if defined(DeviceFamily_CC26X0R2)
