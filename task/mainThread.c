@@ -44,6 +44,9 @@
 #include <ti/drivers/I2C.h>
 #include <ti/drivers/GPIO.h>
 #include <ti/drivers/UART.h>
+#include <ti/drivers/rf/RF.h>
+#include <ti/drivers/pin/PINCC26XX.h>
+
 #include <ti/display/Display.h>
 #include <ti/display/DisplayUart.h>
 
@@ -53,6 +56,8 @@
 /* POSIX Header files */
 #include <semaphore.h>
 
+#include <task/DataType.h>
+
 /********************************************************************************
  *  GLOBAL VARIABLES
  */
@@ -61,11 +66,34 @@ Display_Handle display = NULL;
 sem_t EvtDataRecv;
 
 /********************************************************************************
+ *  EXTERNAL VARIABLES
+ */
+extern I2CBuff_t I2C_BUFF;
+
+/********************************************************************************
  *  EXTERNAL FUNCTIONS
  */
 extern void *eventThread(void *arg0);
 
-// 测试版本
+/********************************************************************************
+ *  Callback
+ */
+void onSignalTriggered(RF_Handle h, RF_RatHandle rh, RF_EventMask e, uint32_t compareCaptureTime)
+{
+    if (e & RF_EventError)
+    {
+        // An internal error has occurred
+    }
+    uint32_t lastCaptureTime = I2C_BUFF.Tsor;
+    I2C_BUFF.Tsor = compareCaptureTime;
+    uint32_t delay = compareCaptureTime - lastCaptureTime;
+
+    Display_printf(display, 0, 0,"SyncTime %u. LastTime %u. delay %u.",
+                   compareCaptureTime,lastCaptureTime,delay);
+}
+
+
+// 测试版本 信号源输入模拟接收
 void testcb(uint_least8_t index){
 
 
@@ -100,6 +128,30 @@ void *mainThread(void *arg0)
 
     /* Initialize semaphore */
     sem_init(&EvtDataRecv, 0, 0);
+
+    /* Initialize RF RAT */
+    // Map cc33235s Sync Input to RFC_GPI0
+    static PIN_Handle RATPinHandle;
+    static PIN_State RATPinState;
+    // Get handle to this collection of pins
+    if (!PIN_open(&RATPinState, BoardGpioInitTable)) {
+        // Handle allocation error
+    }
+    PINCC26XX_setMux(RATPinHandle, CC1310_LAUNCHXL_SYNC_PWM, PINCC26XX_MUX_RFC_GPI0);
+
+    /* Initialize RF Core */
+    RF_Params rfParams;
+    RF_Params_init(&rfParams);
+
+    RF_Handle RFDriver;
+    RF_RatConfigCapture config;
+    RF_RatConfigCapture_init(&config);
+    config.callback = &onSignalTriggered;
+    config.channel = RF_RatChannelAny;
+    config.source = RF_RatCaptureSourceRfcGpi0;
+    config.captureMode = RF_RatCaptureModeBoth; // 上下边沿触发
+    config.repeat = RF_RatCaptureRepeat;
+    RF_RatHandle ratHandle = RF_ratCapture(RFDriver, &config, 0);
 
     Display_printf(display, 0, 0, "NanoEEG cc1310 ready!");
 

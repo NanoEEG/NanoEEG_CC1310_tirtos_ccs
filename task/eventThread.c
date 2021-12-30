@@ -17,7 +17,6 @@
 /********************************************************************
  *  INCLUDES
  */
-
 /* Example/Board Header files */
 #include "Board.h"
 
@@ -39,6 +38,13 @@
 #include DeviceFamily_constructPath(driverlib/i2c.h)
 #include DeviceFamily_constructPath(driverlib/ioc.h)
 #include DeviceFamily_constructPath(driverlib/prcm.h)
+
+#include <task/DataType.h>
+
+/*********************************************************************
+ *  GLOBAL VARIABLES
+ */
+I2CBuff_t I2C_BUFF;
 
 /*********************************************************************
  *  EXTERNAL VARIABLES
@@ -77,7 +83,6 @@ static void cc1310_I2C_init(){
 }
 
 
-
 /*
  *  ======== eventThread ========
  */
@@ -85,8 +90,6 @@ void *eventThread(void *arg0){
 
     /* initial cc1310 I2C as slave */
     cc1310_I2C_init();
-
-    GPIO_setConfig(Board_GPIO_WAKEUP, GPIO_CFG_OUTPUT | GPIO_CFG_OUT_STR_HIGH | GPIO_CFG_OUT_HIGH);
 
     while(1){
 
@@ -97,7 +100,6 @@ void *eventThread(void *arg0){
         GPIO_toggle(Board_GPIO_WAKEUP);
 
         // 轮询等待cc3235s发起事件标签传输
-
         while(I2CSlaveStatus(I2C0_BASE)!=I2C_SLAVE_ACT_TREQ);
         I2CSlaveDataPut(I2C0_BASE,0x01);
         while(I2CSlaveStatus(I2C0_BASE)!=I2C_SLAVE_ACT_TREQ);
