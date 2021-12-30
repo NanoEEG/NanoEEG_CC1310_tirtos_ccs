@@ -262,8 +262,7 @@ typedef enum CC1310_LAUNCHXL_TRNGName {
  *  @brief  Enum of GPIO names
  */
 typedef enum CC1310_LAUNCHXL_GPIOName {
-    CC1310_SYNC_PWM = 0,
-    CC1310_TEST_IN,
+    CC1310_TEST_IN = 0,
     CC1310_WAKEUP,
     CC1310_PIN_BLED,
     CC1310_LAUNCHXL_GPIO_SPI_FLASH_CS,

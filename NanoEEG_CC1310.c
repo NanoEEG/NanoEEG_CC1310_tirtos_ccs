@@ -493,14 +493,12 @@ const uint_least8_t Display_count = 0;
  */
 GPIO_PinConfig gpioPinConfigs[] = {
     /* Input pins */
-    CC1310_LAUNCHXL_SYNC_PWM | GPIO_CFG_INPUT | GPIO_CFG_IN_INT_NONE, /* cc3235s 1s sync input */
+
     //测试版本
-    CC1310_LAUNCHXL_TEST_IN | GPIO_CFG_IN_PU | GPIO_CFG_IN_INT_RISING,
+    CC1310_LAUNCHXL_TEST_IN | GPIO_CFG_IN_PU | GPIO_CFG_IN_INT_FALLING,
     /* Output pins */
-    CC1310_LAUNCHXL_WAKEUP |  GPIO_CFG_OUTPUT | GPIO_CFG_OUT_STR_HIGH | GPIO_CFG_OUT_HIGH, /* WAKEUP cc3235s to get event*/
+    CC1310_LAUNCHXL_WAKEUP |  GPIO_CFG_OUT_STD | GPIO_CFG_OUT_STR_HIGH | GPIO_CFG_OUT_HIGH, /* WAKEUP cc3235s to get event*/
     CC1310_LAUNCHXL_PIN_BLED | GPIO_CFG_OUT_STD | GPIO_CFG_OUT_HIGH | GPIO_CFG_OUT_STR_HIGH, /* LED_BLUE */
-
-
 
 };
 
@@ -512,7 +510,6 @@ GPIO_PinConfig gpioPinConfigs[] = {
  *       reduce memory usage (if placed at end of gpioPinConfigs array).
  */
 GPIO_CallbackFxn gpioCallbackFunctions[] = {
-    NULL,
     NULL,
     NULL,
     NULL,
@@ -706,9 +703,9 @@ const uint_least8_t NVS_count = CC1310_LAUNCHXL_NVSCOUNT;
 #include <ti/drivers/pin/PINCC26XX.h>
 
 const PIN_Config BoardGpioInitTable[] = {
-
     CC1310_LAUNCHXL_TEST_IN | PIN_INPUT_EN | PIN_PULLUP | PIN_IRQ_POSEDGE | PIN_HYSTERESIS,
     CC1310_LAUNCHXL_PIN_BLED | PIN_GPIO_OUTPUT_EN | PIN_GPIO_HIGH | PIN_PUSHPULL | PIN_DRVSTR_MAX,
+
     PIN_TERMINATE
 };
 

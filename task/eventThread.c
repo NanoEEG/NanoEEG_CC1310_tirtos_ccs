@@ -14,6 +14,11 @@
  */
 #define CC1310_SLAVEADDR    0x33
 
+#define GET_LOW_BYTE0(x) ((x >>  0) & 0x000000ff) /* 获取第0个字节 */
+#define GET_LOW_BYTE1(x) ((x >>  8) & 0x000000ff) /* 获取第1个字节 */
+#define GET_LOW_BYTE2(x) ((x >> 16) & 0x000000ff) /* 获取第2个字节 */
+#define GET_LOW_BYTE3(x) ((x >> 24) & 0x000000ff) /* 获取第3个字节 */
+
 /********************************************************************
  *  INCLUDES
  */
@@ -88,25 +93,35 @@ static void cc1310_I2C_init(){
  */
 void *eventThread(void *arg0){
 
+    int i = 0;
     /* initial cc1310 I2C as slave */
     cc1310_I2C_init();
+    uint32_t test = 0xaabbccdd;
 
     while(1){
 
         // 等待事件标签接收 信号量
         sem_wait(&EvtDataRecv);
 
-        // 翻转IO 通知cc3235s发起I2C传输
-        GPIO_toggle(Board_GPIO_WAKEUP);
-
         // 轮询等待cc3235s发起事件标签传输
         while(I2CSlaveStatus(I2C0_BASE)!=I2C_SLAVE_ACT_TREQ);
-        I2CSlaveDataPut(I2C0_BASE,0x01);
-        while(I2CSlaveStatus(I2C0_BASE)!=I2C_SLAVE_ACT_TREQ);
-        I2CSlaveDataPut(I2C0_BASE,0x01);
-        while(I2CSlaveStatus(I2C0_BASE)!=I2C_SLAVE_ACT_TREQ);
-        I2CSlaveDataPut(I2C0_BASE,0x01);
+        //I2CSlaveDataPut(I2C0_BASE,I2C_BUFF.Index);
+        I2CSlaveDataPut(I2C0_BASE,0x11);
+        // LSB
+        for (i=0; i<4; i++){
+            while(I2CSlaveStatus(I2C0_BASE)!=I2C_SLAVE_ACT_TREQ);
+            //I2CSlaveDataPut(I2C0_BASE,(uint8_t)(I2C_BUFF.Tror>>(i*8)));
+            I2CSlaveDataPut(I2C0_BASE,(uint8_t)(test>>(i*8)));
+        }
 
+        for (i=0; i<4; i++){
+            while(I2CSlaveStatus(I2C0_BASE)!=I2C_SLAVE_ACT_TREQ);
+            //I2CSlaveDataPut(I2C0_BASE,(uint8_t)(I2C_BUFF.Tsor>>(i*8)));
+            I2CSlaveDataPut(I2C0_BASE,0xbb);
+        }
+        while(I2CSlaveStatus(I2C0_BASE)!=I2C_SLAVE_ACT_TREQ);
+        //I2CSlaveDataPut(I2C0_BASE,I2C_BUFF.Type);
+        I2CSlaveDataPut(I2C0_BASE,0x01);
     }
 
 }

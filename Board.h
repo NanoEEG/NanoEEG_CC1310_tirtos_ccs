@@ -75,7 +75,6 @@ extern "C" {
 #define Board_DIO21             CC1310_LAUNCHXL_DIO21
 #define Board_DIO22             CC1310_LAUNCHXL_DIO22
 
-#define Board_GPIO_SYNC_PWM     CC1310_SYNC_PWM
 #define Board_GPIO_TEST_IN      CC1310_TEST_IN
 #define Board_GPIO_LED_BLUE     CC1310_PIN_BLED
 #define Board_GPIO_WAKEUP       CC1310_WAKEUP
