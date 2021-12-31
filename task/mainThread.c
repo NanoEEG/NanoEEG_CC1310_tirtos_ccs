@@ -115,8 +115,6 @@ static rfc_dataEntryGeneral_t* currentDataEntry;
 static uint8_t packetLength;
 static uint8_t* packetDataPointer;
 
-static uint8_t packet[MAX_LENGTH + NUM_APPENDED_BYTES - 1]; /* The length byte is stored in a separate variable */
-
 /********************************************************************************
  *  EXTERNAL VARIABLES
  */
@@ -140,7 +138,7 @@ void onSignalTriggered(RF_Handle h, RF_RatHandle rh, RF_EventMask e, uint32_t co
     I2C_BUFF.Tsor = compareCaptureTime;
     uint32_t delay = compareCaptureTime - lastCaptureTime;
 
-    Display_printf(display, 0, 0,"\r\n SyncTime %u. LastTime %u. delay %u.\r\n",
+    //Display_printf(display, 0, 0,"\r\n SyncTime %u. LastTime %u. delay %u.\r\n", \
                    compareCaptureTime,lastCaptureTime,delay);
 }
 
@@ -162,12 +160,16 @@ void RxRecvcallback(RF_Handle h, RF_CmdHandle ch, RF_EventMask e)
         //memcpy(packet, packetDataPointer, (packetLength + 1));
         I2C_BUFF.Index = index++;
         I2C_BUFF.Type = *packetDataPointer;
-        memcpy(&I2C_BUFF.Tror, (uint8_t*)(packetDataPointer+1),4);
+        memcpy(&I2C_BUFF.Tror, packetDataPointer+1,4);
 
         RFQueue_nextEntry();
 
+       // Display_printf(display, 0, 0, "Index: %u, Tror: %u, Tsor: %u, Type %x \r\n",\
+                       I2C_BUFF.Index,I2C_BUFF.Tror,I2C_BUFF.Tsor,I2C_BUFF.Type);
+
         // 翻转IO 通知cc3235s发起I2C传输
         GPIO_toggle(Board_GPIO_WAKEUP);
+        GPIO_toggle(Board_GPIO_LED_BLUE);
 
         sem_post(&EvtDataRecv);
 
@@ -223,11 +225,7 @@ static void RF_Config(){
     RF_cmdPropRx.rxConf.bAppendTimestamp = 1;   /* Append RX time stamp to the packet payload */
 
     /* Request access to the radio */
-#if defined(DeviceFamily_CC26X0R2)
-    rfHandle = RF_open(&rfObject, &RF_prop, (RF_RadioSetup*)&RF_cmdPropRadioSetup, &rfParams);
-#else
     rfHandle = RF_open(&rfObject, &RF_prop, (RF_RadioSetup*)&RF_cmdPropRadioDivSetup, &rfParams);
-#endif// DeviceFamily_CC26X0R2
 
     /* Set the frequency */
     RF_postCmd(rfHandle, (RF_Op*)&RF_cmdFs, RF_PriorityNormal, NULL, 0);

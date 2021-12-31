@@ -192,7 +192,7 @@ rfc_CMD_PROP_RX_t RF_cmdPropRx =
     .rxConf.bIncludeHdr = 0x1,
     .rxConf.bIncludeCrc = 0x0,
     .rxConf.bAppendRssi = 0x0,
-    .rxConf.bAppendTimestamp = 0x0,
+    .rxConf.bAppendTimestamp = 0x1,
     .rxConf.bAppendStatus = 0x1,
     .syncWord = 0x930B51DE,
     .maxPktLen = 0xFF,
@@ -205,5 +205,28 @@ rfc_CMD_PROP_RX_t RF_cmdPropRx =
     .endTime = 0x00000000,
     .pQueue = 0, // INSERT APPLICABLE POINTER: (dataQueue_t*)&xxx
     .pOutput = 0 // INSERT APPLICABLE POINTER: (uint8_t*)&xxx
+};
+
+
+// CMD_PROP_TX
+// Proprietary Mode Transmit Command
+rfc_CMD_PROP_TX_t RF_cmdPropTx =
+{
+    .commandNo = 0x3801,
+    .status = 0x0000,
+    .pNextOp = 0, // INSERT APPLICABLE POINTER: (uint8_t*)&xxx
+    .startTime = 0x00000000,
+    .startTrigger.triggerType = 0x0,
+    .startTrigger.bEnaCmd = 0x0,
+    .startTrigger.triggerNo = 0x0,
+    .startTrigger.pastTrig = 0x0,
+    .condition.rule = 0x1,
+    .condition.nSkip = 0x0,
+    .pktConf.bFsOff = 0x0,
+    .pktConf.bUseCrc = 0x1,
+    .pktConf.bVarLen = 0x1,
+    .pktLen = 0x14,
+    .syncWord = 0x930B51DE,
+    .pPkt = 0 // INSERT APPLICABLE POINTER: (uint8_t*)&xxx
 };
 

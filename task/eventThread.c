@@ -50,6 +50,7 @@
  *  GLOBAL VARIABLES
  */
 I2CBuff_t I2C_BUFF;
+uint32_t test = 0xaabbccdd;
 
 /*********************************************************************
  *  EXTERNAL VARIABLES
@@ -96,7 +97,7 @@ void *eventThread(void *arg0){
     int i = 0;
     /* initial cc1310 I2C as slave */
     cc1310_I2C_init();
-    uint32_t test = 0xaabbccdd;
+
 
     while(1){
 
@@ -105,9 +106,8 @@ void *eventThread(void *arg0){
 
         // 轮询等待cc3235s发起事件标签传输
         while(I2CSlaveStatus(I2C0_BASE)!=I2C_SLAVE_ACT_TREQ);
-        //I2CSlaveDataPut(I2C0_BASE,I2C_BUFF.Index);
-        I2CSlaveDataPut(I2C0_BASE,0x11);
-        // LSB
+        I2CSlaveDataPut(I2C0_BASE,I2C_BUFF.Index);
+
         for (i=0; i<4; i++){
             while(I2CSlaveStatus(I2C0_BASE)!=I2C_SLAVE_ACT_TREQ);
             //I2CSlaveDataPut(I2C0_BASE,(uint8_t)(I2C_BUFF.Tror>>(i*8)));
@@ -122,6 +122,7 @@ void *eventThread(void *arg0){
         while(I2CSlaveStatus(I2C0_BASE)!=I2C_SLAVE_ACT_TREQ);
         //I2CSlaveDataPut(I2C0_BASE,I2C_BUFF.Type);
         I2CSlaveDataPut(I2C0_BASE,0x01);
+
     }
 
 }
