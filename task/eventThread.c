@@ -33,7 +33,6 @@
 /* RTOS driver header files */
 #include <ti/drivers/GPIO.h>
 #include <ti/drivers/dpl/HwiP.h>
-#include <ti/drivers/Power.h>
 #include <ti/drivers/power/PowerCC26XX.h>
 
 /* Driverlib header files */
@@ -62,15 +61,10 @@ extern sem_t EvtDataRecv;
  */
 static void cc1310_I2C_init(){
 
-    /* Power on the I2C module */
-    Power_setDependency(PowerCC26XX_PERIPH_I2C0);
-
-    /* Set constraints for Standby, powerdown and idle mode */
-    Power_setConstraint(PowerCC26XX_SB_DISALLOW);
-    Power_setConstraint(PowerCC26XX_IDLE_PD_DISALLOW);
-
-    PRCMLoadSet();
-    PRCMPeripheralRunEnable(PRCM_PERIPH_I2C0); // Enable I2C module
+    /* power up and enable clock for I2C0. */
+    PRCMPeripheralRunEnable(PRCM_PERIPH_I2C0);
+    PRCMPeripheralSleepEnable(PRCM_PERIPH_I2C0);
+    PRCMPeripheralDeepSleepEnable(PRCM_PERIPH_I2C0);
     PRCMLoadSet();
     while(!PRCMLoadGet());
 
@@ -110,18 +104,18 @@ void *eventThread(void *arg0){
 
         for (i=0; i<4; i++){
             while(I2CSlaveStatus(I2C0_BASE)!=I2C_SLAVE_ACT_TREQ);
-            //I2CSlaveDataPut(I2C0_BASE,(uint8_t)(I2C_BUFF.Tror>>(i*8)));
-            I2CSlaveDataPut(I2C0_BASE,(uint8_t)(test>>(i*8)));
+            I2CSlaveDataPut(I2C0_BASE,(uint8_t)(I2C_BUFF.Tror>>(i*8)));
+            //I2CSlaveDataPut(I2C0_BASE,(uint8_t)(test>>(i*8)));
         }
 
         for (i=0; i<4; i++){
             while(I2CSlaveStatus(I2C0_BASE)!=I2C_SLAVE_ACT_TREQ);
-            //I2CSlaveDataPut(I2C0_BASE,(uint8_t)(I2C_BUFF.Tsor>>(i*8)));
-            I2CSlaveDataPut(I2C0_BASE,0xbb);
+            I2CSlaveDataPut(I2C0_BASE,(uint8_t)(I2C_BUFF.Tsor>>(i*8)));
+            //I2CSlaveDataPut(I2C0_BASE,0xbb);
         }
         while(I2CSlaveStatus(I2C0_BASE)!=I2C_SLAVE_ACT_TREQ);
-        //I2CSlaveDataPut(I2C0_BASE,I2C_BUFF.Type);
-        I2CSlaveDataPut(I2C0_BASE,0x01);
+        I2CSlaveDataPut(I2C0_BASE,I2C_BUFF.Type);
+        //I2CSlaveDataPut(I2C0_BASE,0x01);
 
     }
 
