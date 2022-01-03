@@ -91,16 +91,16 @@ sem_t EvtDataRecv;
 /* 运行时配置 */
 PIN_Config pinTable[] =
 {
-    CC1310_LAUNCHXL_SYNC_PWM | PIN_INPUT_EN, /* cc3235s 1s sync input */
+    CC1310_LAUNCHXL_SYNC_PWM | PIN_INPUT_EN | PIN_PULLUP, /* cc3235s 1s sync input */
     PIN_TERMINATE
 };
 #endif
 
 #if (DelayTest)
 /* 运行时配置 */
-PIN_Config pinTable[] =
+PIN_Config TestpinTable[] =
 {
-    CC1310_LAUNCHXL_TEST_IN | PIN_INPUT_EN, /* 空中延时测试 */
+    CC1310_LAUNCHXL_TEST_IN | PIN_INPUT_EN | PIN_PULLUP, /* 空中延时测试 */
     PIN_TERMINATE
 };
 #endif
@@ -170,7 +170,7 @@ void onSignalTriggered(RF_Handle h, RF_RatHandle rh, RF_EventMask e, uint32_t co
         // An internal error has occurred
     }
     TrigerTime = compareCaptureTime;
-    GPIO_toggle(Board_GPIO_LED_BLUE);
+
 }
 #endif
 
@@ -207,7 +207,7 @@ void RxRecvcallback(RF_Handle h, RF_CmdHandle ch, RF_EventMask e)
 
         // 翻转IO 通知cc3235s发起I2C传输
         GPIO_toggle(Board_GPIO_WAKEUP);
-        //GPIO_toggle(Board_GPIO_LED_BLUE);
+        GPIO_toggle(Board_GPIO_LED_BLUE);
 
         sem_post(&EvtDataRecv);
 
@@ -277,7 +277,7 @@ static void RFRAT_Config(){
 
     #if (DelayTest)
 
-    RATPinHandle = PIN_open(&RATPinState, pinTable);
+    RATPinHandle = PIN_open(&RATPinState, TestpinTable);
     if (RATPinHandle == NULL)
         while(1);
 
