@@ -44,6 +44,7 @@
 #include <ti/drivers/I2C.h>
 #include <ti/drivers/GPIO.h>
 #include <ti/drivers/UART.h>
+#include <ti/drivers/PIN.h>
 #include <ti/drivers/rf/RF.h>
 #include <ti/drivers/pin/PINCC26XX.h>
 
@@ -86,12 +87,23 @@ pthread_t   eventthread;
 Display_Handle display = NULL;
 sem_t EvtDataRecv;
 
+#if (SyncTest)
 /* 运行时配置 */
 PIN_Config pinTable[] =
 {
     CC1310_LAUNCHXL_SYNC_PWM | PIN_INPUT_EN, /* cc3235s 1s sync input */
     PIN_TERMINATE
 };
+#endif
+
+#if (DelayTest)
+/* 运行时配置 */
+PIN_Config pinTable[] =
+{
+    CC1310_LAUNCHXL_TEST_IN | PIN_INPUT_EN, /* 空中延时测试 */
+    PIN_TERMINATE
+};
+#endif
 
 /********************************************************************************
  *  LOCAL VARIABLES
@@ -115,6 +127,11 @@ static rfc_dataEntryGeneral_t* currentDataEntry;
 static uint8_t packetLength;
 static uint8_t* packetDataPointer;
 
+
+#if (DelayTest)
+static uint32_t TrigerTime = 0;
+#endif
+
 /********************************************************************************
  *  EXTERNAL VARIABLES
  */
@@ -128,6 +145,8 @@ extern void *eventThread(void *arg0);
 /********************************************************************************
  *  Callback
  */
+
+#if (SyncTest)
 void onSignalTriggered(RF_Handle h, RF_RatHandle rh, RF_EventMask e, uint32_t compareCaptureTime)
 {
     if (e & RF_EventError)
@@ -141,6 +160,20 @@ void onSignalTriggered(RF_Handle h, RF_RatHandle rh, RF_EventMask e, uint32_t co
     //Display_printf(display, 0, 0,"\r\n SyncTime %u. LastTime %u. delay %u.\r\n", \
                    compareCaptureTime,lastCaptureTime,delay);
 }
+#endif
+
+#if (DelayTest)
+void onSignalTriggered(RF_Handle h, RF_RatHandle rh, RF_EventMask e, uint32_t compareCaptureTime)
+{
+    if (e & RF_EventError)
+    {
+        // An internal error has occurred
+    }
+    TrigerTime = compareCaptureTime;
+    GPIO_toggle(Board_GPIO_LED_BLUE);
+}
+#endif
+
 
 static int index = 0;
 void RxRecvcallback(RF_Handle h, RF_CmdHandle ch, RF_EventMask e)
@@ -164,32 +197,21 @@ void RxRecvcallback(RF_Handle h, RF_CmdHandle ch, RF_EventMask e)
 
         RFQueue_nextEntry();
 
+        #if (DelayTest)
        // Display_printf(display, 0, 0, "Index: %u, Tror: %u, Tsor: %u, Type %x \r\n",\
                        I2C_BUFF.Index,I2C_BUFF.Tror,I2C_BUFF.Tsor,I2C_BUFF.Type);
+        uint32_t Delay = I2C_BUFF.Tror - TrigerTime;
+        Display_printf(display, 0, 0, "Index: %u, Tror: %u, Ttor: %u, Delay %u \r\n",\
+                              I2C_BUFF.Index,I2C_BUFF.Tror,TrigerTime,Delay);
+        #endif
 
         // 翻转IO 通知cc3235s发起I2C传输
         GPIO_toggle(Board_GPIO_WAKEUP);
-        GPIO_toggle(Board_GPIO_LED_BLUE);
+        //GPIO_toggle(Board_GPIO_LED_BLUE);
 
         sem_post(&EvtDataRecv);
 
     }
-}
-
-// 测试版本 信号源输入模拟接收
-static int idx = 0;
-void testcb(uint_least8_t index){
-
-    I2C_BUFF.Tror = RF_getCurrentTime();
-    I2C_BUFF.Index = idx++;
-    I2C_BUFF.Type = 0xaa;
-
-    // 翻转IO 通知cc3235s发起I2C传输
-    GPIO_toggle(Board_GPIO_WAKEUP);
-
-    GPIO_toggle(Board_GPIO_LED_BLUE);
-
-    sem_post(&EvtDataRecv);
 }
 
 /********************************************************************************
@@ -236,13 +258,13 @@ static void RFRAT_Config(){
 
     /* Initialize RF RAT */
     // Map cc33235s Sync Input to RFC_GPI0
+    #if (SyncTest)
 
     RATPinHandle = PIN_open(&RATPinState, pinTable);
     if (RATPinHandle == NULL)
         while(1);
 
     PINCC26XX_setMux(RATPinHandle, CC1310_LAUNCHXL_SYNC_PWM, PINCC26XX_MUX_RFC_GPI0);
-
 
     RF_RatConfigCapture config;
     RF_RatConfigCapture_init(&config);
@@ -251,6 +273,24 @@ static void RFRAT_Config(){
     config.source = RF_RatCaptureSourceRfcGpi0;
     config.captureMode = RF_RatCaptureModeBoth; // 上下边沿触发
     config.repeat = RF_RatCaptureRepeat;
+    #endif
+
+    #if (DelayTest)
+
+    RATPinHandle = PIN_open(&RATPinState, pinTable);
+    if (RATPinHandle == NULL)
+        while(1);
+
+    PINCC26XX_setMux(RATPinHandle, CC1310_LAUNCHXL_TEST_IN, PINCC26XX_MUX_RFC_GPI0);
+
+    RF_RatConfigCapture config;
+    RF_RatConfigCapture_init(&config);
+    config.callback = &onSignalTriggered;
+    config.channel = RF_RatChannelAny;
+    config.source = RF_RatCaptureSourceRfcGpi0;
+    config.captureMode = RF_RatCaptureModeRising; // 上边沿触发
+    config.repeat = RF_RatCaptureRepeat;
+    #endif
 
     ratHandle = RF_ratCapture(rfHandle, &config, 0);
 }
@@ -371,11 +411,6 @@ void *mainThread(void *arg0)
 
     /* led on to indicate the system is ready! */
     GPIO_write(Board_GPIO_LED_BLUE,CC1310_LAUNCHXL_PIN_LED_ON);
-
-    //测试版本
-    GPIO_setConfig(Board_GPIO_TEST_IN, GPIO_CFG_IN_PU | GPIO_CFG_IN_INT_RISING);
-    GPIO_setCallback(Board_GPIO_TEST_IN,testcb);
-    GPIO_enableInt(Board_GPIO_TEST_IN);
 
     /* cc3235事件标签处理线程*/
     /* Initialize the attributes structure with default values */
