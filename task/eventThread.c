@@ -104,6 +104,12 @@ void *eventThread(void *arg0){
 
         for (i=0; i<4; i++){
             while(I2CSlaveStatus(I2C0_BASE)!=I2C_SLAVE_ACT_TREQ);
+            I2CSlaveDataPut(I2C0_BASE,(uint8_t)(I2C_BUFF.Ttor>>(i*8)));
+            //I2CSlaveDataPut(I2C0_BASE,(uint8_t)(test>>(i*8)));
+        }
+
+        for (i=0; i<4; i++){
+            while(I2CSlaveStatus(I2C0_BASE)!=I2C_SLAVE_ACT_TREQ);
             I2CSlaveDataPut(I2C0_BASE,(uint8_t)(I2C_BUFF.Tror>>(i*8)));
             //I2CSlaveDataPut(I2C0_BASE,(uint8_t)(test>>(i*8)));
         }

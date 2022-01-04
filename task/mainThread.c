@@ -87,23 +87,20 @@ pthread_t   eventthread;
 Display_Handle display = NULL;
 sem_t EvtDataRecv;
 
-#if (SyncTest)
 /* 运行时配置 */
 PIN_Config pinTable[] =
 {
     CC1310_LAUNCHXL_SYNC_PWM | PIN_INPUT_EN | PIN_PULLUP, /* cc3235s 1s sync input */
     PIN_TERMINATE
 };
-#endif
 
-#if (DelayTest)
 /* 运行时配置 */
 PIN_Config TestpinTable[] =
 {
     CC1310_LAUNCHXL_TEST_IN | PIN_INPUT_EN | PIN_PULLUP, /* 空中延时测试 */
     PIN_TERMINATE
 };
-#endif
+
 
 /********************************************************************************
  *  LOCAL VARIABLES
@@ -128,10 +125,6 @@ static uint8_t packetLength;
 static uint8_t* packetDataPointer;
 
 
-#if (DelayTest)
-static uint32_t TrigerTime = 0;
-#endif
-
 /********************************************************************************
  *  EXTERNAL VARIABLES
  */
@@ -146,33 +139,24 @@ extern void *eventThread(void *arg0);
  *  Callback
  */
 
-#if (SyncTest)
-void onSignalTriggered(RF_Handle h, RF_RatHandle rh, RF_EventMask e, uint32_t compareCaptureTime)
+void onSyncTriggered(RF_Handle h, RF_RatHandle rh, RF_EventMask e, uint32_t compareCaptureTime)
 {
     if (e & RF_EventError)
     {
         // An internal error has occurred
     }
-    uint32_t lastCaptureTime = I2C_BUFF.Tsor;
     I2C_BUFF.Tsor = compareCaptureTime;
-    uint32_t delay = compareCaptureTime - lastCaptureTime;
-
-    //Display_printf(display, 0, 0,"\r\n SyncTime %u. LastTime %u. delay %u.\r\n", \
-                   compareCaptureTime,lastCaptureTime,delay);
 }
-#endif
 
-#if (DelayTest)
-void onSignalTriggered(RF_Handle h, RF_RatHandle rh, RF_EventMask e, uint32_t compareCaptureTime)
+void onEventTriggered(RF_Handle h, RF_RatHandle rh, RF_EventMask e, uint32_t compareCaptureTime)
 {
     if (e & RF_EventError)
     {
         // An internal error has occurred
     }
-    TrigerTime = compareCaptureTime;
+    I2C_BUFF.Ttor = compareCaptureTime;
 
 }
-#endif
 
 
 static int index = 0;
@@ -196,14 +180,6 @@ void RxRecvcallback(RF_Handle h, RF_CmdHandle ch, RF_EventMask e)
         memcpy(&I2C_BUFF.Tror, packetDataPointer+1,4);
 
         RFQueue_nextEntry();
-
-        #if (DelayTest)
-       // Display_printf(display, 0, 0, "Index: %u, Tror: %u, Tsor: %u, Type %x \r\n",\
-                       I2C_BUFF.Index,I2C_BUFF.Tror,I2C_BUFF.Tsor,I2C_BUFF.Type);
-        uint32_t Delay = I2C_BUFF.Tror - TrigerTime;
-        Display_printf(display, 0, 0, "Index: %u, Tror: %u, Ttor: %u, Delay %u \r\n",\
-                              I2C_BUFF.Index,I2C_BUFF.Tror,TrigerTime,Delay);
-        #endif
 
         // 翻转IO 通知cc3235s发起I2C传输
         GPIO_toggle(Board_GPIO_WAKEUP);
@@ -258,7 +234,6 @@ static void RFRAT_Config(){
 
     /* Initialize RF RAT */
     // Map cc33235s Sync Input to RFC_GPI0
-    #if (SyncTest)
 
     RATPinHandle = PIN_open(&RATPinState, pinTable);
     if (RATPinHandle == NULL)
@@ -266,33 +241,33 @@ static void RFRAT_Config(){
 
     PINCC26XX_setMux(RATPinHandle, CC1310_LAUNCHXL_SYNC_PWM, PINCC26XX_MUX_RFC_GPI0);
 
-    RF_RatConfigCapture config;
-    RF_RatConfigCapture_init(&config);
-    config.callback = &onSignalTriggered;
-    config.channel = RF_RatChannelAny;
-    config.source = RF_RatCaptureSourceRfcGpi0;
-    config.captureMode = RF_RatCaptureModeBoth; // 上下边沿触发
-    config.repeat = RF_RatCaptureRepeat;
-    #endif
+    RF_RatConfigCapture config1;
+    RF_RatConfigCapture_init(&config1);
+    config1.callback = &onSyncTriggered;
+    config1.channel = RF_RatChannelAny;
+    config1.source = RF_RatCaptureSourceRfcGpi0;
+    config1.captureMode = RF_RatCaptureModeBoth; // 上下边沿触发
+    config1.repeat = RF_RatCaptureRepeat;
 
-    #if (DelayTest)
+    ratHandle = RF_ratCapture(rfHandle, &config1, 0);
+
 
     RATPinHandle = PIN_open(&RATPinState, TestpinTable);
     if (RATPinHandle == NULL)
         while(1);
 
-    PINCC26XX_setMux(RATPinHandle, CC1310_LAUNCHXL_TEST_IN, PINCC26XX_MUX_RFC_GPI0);
+    PINCC26XX_setMux(RATPinHandle, CC1310_LAUNCHXL_TEST_IN, PINCC26XX_MUX_RFC_GPI1);
 
-    RF_RatConfigCapture config;
-    RF_RatConfigCapture_init(&config);
-    config.callback = &onSignalTriggered;
-    config.channel = RF_RatChannelAny;
-    config.source = RF_RatCaptureSourceRfcGpi0;
-    config.captureMode = RF_RatCaptureModeRising; // 上边沿触发
-    config.repeat = RF_RatCaptureRepeat;
-    #endif
+    RF_RatConfigCapture config2;
+    RF_RatConfigCapture_init(&config2);
+    config2.callback = &onEventTriggered;
+    config2.channel = RF_RatChannelAny;
+    config2.source = RF_RatCaptureSourceRfcGpi1;
+    config2.captureMode = RF_RatCaptureModeRising; // 上边沿触发
+    config2.repeat = RF_RatCaptureRepeat;
 
-    ratHandle = RF_ratCapture(rfHandle, &config, 0);
+
+    ratHandle = RF_ratCapture(rfHandle, &config2, 0);
 }
 
 static void RF_rxRUN(){
