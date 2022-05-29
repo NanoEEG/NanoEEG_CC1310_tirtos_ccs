@@ -106,6 +106,16 @@ PIN_Config TestpinTable[] =
 #endif
 
 /********************************************************************************
+ *  Macros
+ */
+
+/* Packet TX Configuration */
+#define PAYLOAD_LENGTH      1
+
+#define MAX_NUM_RX_BYTES    1000   // Maximum RX bytes to receive in one go
+#define MAX_NUM_TX_BYTES    1000
+
+/********************************************************************************
  *  LOCAL VARIABLES
  */
 static RF_Object rfObject;
@@ -114,6 +124,14 @@ static RF_Handle rfHandle;
 static RF_RatHandle ratHandle;
 static PIN_Handle RATPinHandle;
 static PIN_State RATPinState;
+
+uint8_t wantedRxBytes;            // Number of bytes received so far
+uint8_t rxBuf[MAX_NUM_RX_BYTES];   // Receive buffer
+uint8_t txBuf[MAX_NUM_TX_BYTES];    // Transmit buffer
+
+uint8_t eventtype;
+uint8_t RxData = 0x00;
+uint32_t txTimestamp;
 
 #pragma DATA_ALIGN (rxDataEntryBuffer, 4);
 static uint8_t
@@ -380,6 +398,59 @@ static void RF_rxRUN(){
     }
 }
 
+static void eventSave (UART_Handle handle, void *rxBuf, size_t size){
+    // 读取RAT当前值，指定5ms之后发送
+    txTimestamp = RF_getCurrentTime() + RF_convertMsToRatTicks(5);
+    memcpy(&I2C_BUFF.Tror, txTimestamp,4);
+    // Make sure we received all expected bytes
+    if (size == wantedRxBytes) {
+
+        // Copy bytes from RX buffer to TX buffer
+       size_t i;
+       for( i= 0; i < size; i++){
+           txBuf[i] = ((uint8_t*)rxBuf)[i];
+       }
+       I2C_BUFF.Type = txBuf[0];
+       UART_write(handle, txBuf, 1);
+       GPIO_toggle(Board_GPIO_LED_BLUE);
+//       UART_read(handle, rxBuf, wantedRxBytes);
+//        Echo the bytes received back to transmitter
+//       UART_write(handle, &RxData, 1);
+       sem_post(&EvtDataRecv);
+       // Start another read, with size the same as it was during first call to
+       // UART_read()
+//       UART_read(handle, rxBuf, wantedRxBytes);
+    }
+    else {
+        while(1);
+        // Handle error or call to UART_readCancel()
+    }
+}
+
+static UART_Handle Uart_open()
+{
+    UART_Handle uart;
+    UART_Params params;
+    UART_init();
+    /* Create a UART with data processing off. */
+    UART_Params_init(&params);
+    params.baudRate = 115200;
+    params.readMode = UART_MODE_CALLBACK;
+    params.readDataMode = UART_DATA_BINARY;
+    params.readCallback = eventSave;
+//    params.writeMode = UART_MODE_CALLBACK;
+    params.writeDataMode = UART_DATA_BINARY;
+//    params.writeCallback = writeCallback;
+
+    uart = UART_open(Board_UART0, &params);
+
+    if (uart == NULL) {
+        /* UART_open() failed */
+        while (1);
+    }
+    return uart;
+}
+
 /*
  *  ======== mainThread ========
  */
@@ -388,29 +459,35 @@ void *mainThread(void *arg0)
     pthread_attr_t      attrs;
     struct sched_param  priParam;
     int                 retc;
+    UART_Handle handle;
 
     /* Call driver init functions */
     GPIO_init();
-    Display_init();
+    handle = Uart_open();
 
-    /* Initialize display */
-    display = Display_open(Display_Type_UART,NULL); //TODO display输出有bug
-    if (display == NULL) {
-        /* UART_open() failed */
-        while (1);
-    }
+//    Display_init();
+//
+//    /* Initialize display */
+//    display = Display_open(Display_Type_UART,NULL); //TODO display输出有bug
+//    if (display == NULL) {
+//        /* UART_open() failed */
+//        while (1);
+//    }
 
     /* Initialize semaphore */
     sem_init(&EvtDataRecv, 0, 0);
 
-    /* Initialize RF Core */
-    RF_Config();
-    RFRAT_Config();
+    wantedRxBytes = 1;
+    UART_read(handle, rxBuf, wantedRxBytes);
 
-    Display_printf(display, 0, 0, "\r\nNanoEEG cc1310 ready!\r\n");
+//    /* Initialize RF Core */
+//    RF_Config();
+//    RFRAT_Config();
+
+//    Display_printf(display, 0, 0, "\r\nNanoEEG cc1310 ready!\r\n");
 
     /* led on to indicate the system is ready! */
-    GPIO_write(Board_GPIO_LED_BLUE,CC1310_LAUNCHXL_PIN_LED_ON);
+    GPIO_write(Board_GPIO_LED_BLUE,CC1310_LAUNCHXL_PIN_LED_OFF);
 
     /* cc3235事件标签处理线程*/
     /* Initialize the attributes structure with default values */
@@ -432,8 +509,8 @@ void *mainThread(void *arg0)
         while (1) {}
     }
 
-    /* Enter RX mode and stay forever in RX */
-    RF_rxRUN();
+//    /* Enter RX mode and stay forever in RX */
+//    RF_rxRUN();
 
     while (1) {
 
