@@ -78,14 +78,18 @@
                                    * Max 30 payload bytes
                                    * 1 status byte (RF_cmdPropRx.rxConf.bAppendStatus = 0x1) */
 
+/* Packet TX/RX Configuration */
+#define PAYLOAD_LENGTH      1
 
+#define MAX_NUM_RX_BYTES    5   // Maximum RX bytes to receive in one go
+#define MAX_NUM_TX_BYTES    5
 
 /********************************************************************************
  *  GLOBAL VARIABLES
  */
 pthread_t   eventthread;
-Display_Handle display = NULL;
 sem_t EvtDataRecv;
+UART_Handle uart=NULL;
 
 #if (SyncTest)
 /* 运行时配置 */
@@ -105,15 +109,6 @@ PIN_Config TestpinTable[] =
 };
 #endif
 
-/********************************************************************************
- *  Macros
- */
-
-/* Packet TX Configuration */
-#define PAYLOAD_LENGTH      1
-
-#define MAX_NUM_RX_BYTES    1000   // Maximum RX bytes to receive in one go
-#define MAX_NUM_TX_BYTES    1000
 
 /********************************************************************************
  *  LOCAL VARIABLES
@@ -125,13 +120,13 @@ static RF_RatHandle ratHandle;
 static PIN_Handle RATPinHandle;
 static PIN_State RATPinState;
 
-uint8_t wantedRxBytes;            // Number of bytes received so far
+uint8_t wantedRxBytes=1;            // Number of bytes received so far
 uint8_t rxBuf[MAX_NUM_RX_BYTES];   // Receive buffer
 uint8_t txBuf[MAX_NUM_TX_BYTES];    // Transmit buffer
 
 uint8_t eventtype;
 uint8_t RxData = 0x00;
-uint32_t txTimestamp;
+uint32_t TrigerTimestamp;
 
 #pragma DATA_ALIGN (rxDataEntryBuffer, 4);
 static uint8_t
@@ -167,6 +162,7 @@ extern void *eventThread(void *arg0);
 #if (SyncTest)
 void onSignalTriggered(RF_Handle h, RF_RatHandle rh, RF_EventMask e, uint32_t compareCaptureTime)
 {
+
     if (e & RF_EventError)
     {
         // An internal error has occurred
@@ -174,7 +170,7 @@ void onSignalTriggered(RF_Handle h, RF_RatHandle rh, RF_EventMask e, uint32_t co
     uint32_t lastCaptureTime = I2C_BUFF.Tsor;
     I2C_BUFF.Tsor = compareCaptureTime;
     uint32_t delay = compareCaptureTime - lastCaptureTime;
-
+    //UART_write(uart, &I2C_BUFF.Tsor, 4);
     //Display_printf(display, 0, 0,"\r\n SyncTime %u. LastTime %u. delay %u.\r\n", \
                    compareCaptureTime,lastCaptureTime,delay);
 }
@@ -194,42 +190,23 @@ void onSignalTriggered(RF_Handle h, RF_RatHandle rh, RF_EventMask e, uint32_t co
 
 
 static int index = 0;
-void RxRecvcallback(RF_Handle h, RF_CmdHandle ch, RF_EventMask e)
-{
-    if (e & RF_EventRxEntryDone)
-    {
-        /* Get current unhandled data entry */
-        currentDataEntry = RFQueue_getDataEntry();
+static void EventTriger (UART_Handle handle, void *rxBuf, size_t size){
 
-        /* Handle the packet data, located at &currentDataEntry->data:
-         * - Length is the first byte with the current configuration
-         * - Data starts from the second byte */
-        packetLength      = *(uint8_t*)(&currentDataEntry->data);
-        packetDataPointer = (uint8_t*)(&currentDataEntry->data + 1);
+    // 读取RAT当前值，作为事件发生的时间戳（代替原本射频核接收到数据包的时间戳）
+    TrigerTimestamp = RF_getCurrentTime(); // 事件发生的时点
 
-        /* Copy the payload + the status byte to the packet variable */
-        //memcpy(packet, packetDataPointer, (packetLength + 1));
-        I2C_BUFF.Index = index++;
-        I2C_BUFF.Type = *packetDataPointer;
-        memcpy(&I2C_BUFF.Tror, packetDataPointer+1,4);
+    I2C_BUFF.Index = index++;
+    memcpy(&I2C_BUFF.Tror, &TrigerTimestamp,4);
+    I2C_BUFF.Type = *(uint8_t*)rxBuf;
 
-        RFQueue_nextEntry();
+    UART_write(handle, rxBuf, 1); // 回传测试
 
-        #if (DelayTest)
-       // Display_printf(display, 0, 0, "Index: %u, Tror: %u, Tsor: %u, Type %x \r\n",\
-                       I2C_BUFF.Index,I2C_BUFF.Tror,I2C_BUFF.Tsor,I2C_BUFF.Type);
-        uint32_t Delay = I2C_BUFF.Tror - TrigerTime;
-        Display_printf(display, 0, 0, "Index: %u, Tror: %u, Ttor: %u, Delay %u \r\n",\
-                              I2C_BUFF.Index,I2C_BUFF.Tror,TrigerTime,Delay);
-        #endif
+    // 翻转IO 通知cc3235s发起I2C传输
+    GPIO_toggle(Board_GPIO_WAKEUP);
+    GPIO_toggle(Board_GPIO_LED_BLUE);
 
-        // 翻转IO 通知cc3235s发起I2C传输
-        GPIO_toggle(Board_GPIO_WAKEUP);
-        GPIO_toggle(Board_GPIO_LED_BLUE);
+    sem_post(&EvtDataRecv);
 
-        sem_post(&EvtDataRecv);
-
-    }
 }
 
 /********************************************************************************
@@ -315,141 +292,11 @@ static void RFRAT_Config(){
 
 static void RF_rxRUN(){
 
-    /* Enter RX mode and stay forever in RX */
-    RF_EventMask terminationReason = RF_runCmd(rfHandle, (RF_Op*)&RF_cmdPropRx,
-                                               RF_PriorityNormal, &RxRecvcallback,
-                                               RF_EventRxEntryDone);
 
-    switch(terminationReason)
-    {
-        case RF_EventLastCmdDone:
-            // A stand-alone radio operation command or the last radio
-            // operation command in a chain finished.
-            break;
-        case RF_EventCmdCancelled:
-            // Command cancelled before it was started; it can be caused
-            // by RF_cancelCmd() or RF_flushCmd().
-            break;
-        case RF_EventCmdAborted:
-            // Abrupt command termination caused by RF_cancelCmd() or
-            // RF_flushCmd().
-            break;
-        case RF_EventCmdStopped:
-            // Graceful command termination caused by RF_cancelCmd() or
-            // RF_flushCmd().
-            break;
-        default:
-            // Uncaught error event
-            while(1);
-    }
-
-    uint32_t cmdStatus = ((volatile RF_Op*)&RF_cmdPropRx)->status;
-    switch(cmdStatus)
-    {
-        case PROP_DONE_OK:
-            // Packet received with CRC OK
-            break;
-        case PROP_DONE_RXERR:
-            // Packet received with CRC error
-            break;
-        case PROP_DONE_RXTIMEOUT:
-            // Observed end trigger while in sync search
-            break;
-        case PROP_DONE_BREAK:
-            // Observed end trigger while receiving packet when the command is
-            // configured with endType set to 1
-            break;
-        case PROP_DONE_ENDED:
-            // Received packet after having observed the end trigger; if the
-            // command is configured with endType set to 0, the end trigger
-            // will not terminate an ongoing reception
-            break;
-        case PROP_DONE_STOPPED:
-            // received CMD_STOP after command started and, if sync found,
-            // packet is received
-            break;
-        case PROP_DONE_ABORT:
-            // Received CMD_ABORT after command started
-            break;
-        case PROP_ERROR_RXBUF:
-            // No RX buffer large enough for the received data available at
-            // the start of a packet
-            break;
-        case PROP_ERROR_RXFULL:
-            // Out of RX buffer space during reception in a partial read
-            break;
-        case PROP_ERROR_PAR:
-            // Observed illegal parameter
-            break;
-        case PROP_ERROR_NO_SETUP:
-            // Command sent without setting up the radio in a supported
-            // mode using CMD_PROP_RADIO_SETUP or CMD_RADIO_SETUP
-            break;
-        case PROP_ERROR_NO_FS:
-            // Command sent without the synthesizer being programmed
-            break;
-        case PROP_ERROR_RXOVF:
-            // RX overflow observed during operation
-            break;
-        default:
-            // Uncaught error event - these could come from the
-            // pool of states defined in rf_mailbox.h
-            while(1);
-    }
 }
 
-static void eventSave (UART_Handle handle, void *rxBuf, size_t size){
-    // 读取RAT当前值，指定5ms之后发送
-    txTimestamp = RF_getCurrentTime() + RF_convertMsToRatTicks(5);
-    memcpy(&I2C_BUFF.Tror, txTimestamp,4);
-    // Make sure we received all expected bytes
-    if (size == wantedRxBytes) {
 
-        // Copy bytes from RX buffer to TX buffer
-       size_t i;
-       for( i= 0; i < size; i++){
-           txBuf[i] = ((uint8_t*)rxBuf)[i];
-       }
-       I2C_BUFF.Type = txBuf[0];
-       UART_write(handle, txBuf, 1);
-       GPIO_toggle(Board_GPIO_LED_BLUE);
-//       UART_read(handle, rxBuf, wantedRxBytes);
-//        Echo the bytes received back to transmitter
-//       UART_write(handle, &RxData, 1);
-       sem_post(&EvtDataRecv);
-       // Start another read, with size the same as it was during first call to
-       // UART_read()
-//       UART_read(handle, rxBuf, wantedRxBytes);
-    }
-    else {
-        while(1);
-        // Handle error or call to UART_readCancel()
-    }
-}
 
-static UART_Handle Uart_open()
-{
-    UART_Handle uart;
-    UART_Params params;
-    UART_init();
-    /* Create a UART with data processing off. */
-    UART_Params_init(&params);
-    params.baudRate = 115200;
-    params.readMode = UART_MODE_CALLBACK;
-    params.readDataMode = UART_DATA_BINARY;
-    params.readCallback = eventSave;
-//    params.writeMode = UART_MODE_CALLBACK;
-    params.writeDataMode = UART_DATA_BINARY;
-//    params.writeCallback = writeCallback;
-
-    uart = UART_open(Board_UART0, &params);
-
-    if (uart == NULL) {
-        /* UART_open() failed */
-        while (1);
-    }
-    return uart;
-}
 
 /*
  *  ======== mainThread ========
@@ -459,32 +306,35 @@ void *mainThread(void *arg0)
     pthread_attr_t      attrs;
     struct sched_param  priParam;
     int                 retc;
-    UART_Handle handle;
+    UART_Params         uartParams;
+
 
     /* Call driver init functions */
     GPIO_init();
-    handle = Uart_open();
+    UART_init();
 
-//    Display_init();
-//
-//    /* Initialize display */
-//    display = Display_open(Display_Type_UART,NULL); //TODO display输出有bug
-//    if (display == NULL) {
-//        /* UART_open() failed */
-//        while (1);
-//    }
+    /* Create a UART with data processing off. */
+    UART_Params_init(&uartParams);
+    uartParams.writeDataMode = UART_DATA_BINARY;
+    uartParams.readDataMode = UART_DATA_BINARY;
+    uartParams.readReturnMode = UART_RETURN_FULL;
+    uartParams.readEcho = UART_ECHO_OFF;
+    uartParams.readMode = UART_MODE_CALLBACK;
+    uartParams.readCallback = EventTriger;   //读回调
+    uartParams.baudRate = 115200;
+
+    uart = UART_open(Board_UART0, &uartParams);
+
+    if (uart == NULL) {
+        /* UART_open() failed */
+        while (1);
+    }
+    /* 射频核配置 */
+    RF_Config();
+    RFRAT_Config();
 
     /* Initialize semaphore */
     sem_init(&EvtDataRecv, 0, 0);
-
-    wantedRxBytes = 1;
-    UART_read(handle, rxBuf, wantedRxBytes);
-
-//    /* Initialize RF Core */
-//    RF_Config();
-//    RFRAT_Config();
-
-//    Display_printf(display, 0, 0, "\r\nNanoEEG cc1310 ready!\r\n");
 
     /* led on to indicate the system is ready! */
     GPIO_write(Board_GPIO_LED_BLUE,CC1310_LAUNCHXL_PIN_LED_OFF);
@@ -509,10 +359,9 @@ void *mainThread(void *arg0)
         while (1) {}
     }
 
-//    /* Enter RX mode and stay forever in RX */
-//    RF_rxRUN();
-
     while (1) {
 
+        //主线程为串口接收线程
+        UART_read(uart, rxBuf, 1);
     }
 }
